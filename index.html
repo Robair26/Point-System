@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Points System</title>
+
+  <!-- Firebase JavaScript SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.2/firebase-app.js";
+    import {
+      getAuth,
+      signInWithEmailAndPassword,
+      onAuthStateChanged,
+      signOut,
+    } from "https://www.gstatic.com/firebasejs/9.0.2/firebase-auth.js";
+    import {
+      getFirestore,
+      collection,
+      getDocs,
+      doc,
+      updateDoc,
+      increment,
+    } from "https://www.gstatic.com/firebasejs/9.0.2/firebase-firestore.js";
+
+    // Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyD_AS9NbAbEQZpgnOCjAfTJJnegC4gYzvM",
+  authDomain: "point-system-dff96.firebaseapp.com",
+  projectId: "point-system-dff96",
+  storageBucket: "point-system-dff96.appspot.com",
+  messagingSenderId: "494724760660",
+  appId: "1:494724760660:web:5be40300feb858d986d9c1"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const firestore = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Function to update points for a team
+    const updatePoints = async (teamId, pointsToAdd) => {
+      try {
+        const teamRef = doc(firestore, "Teams", teamId);
+        await updateDoc(teamRef, {
+          points: increment(pointsToAdd)
+        });
+        console.log(`Points updated for Team ${teamId} successfully`);
+        displayTeams();
+      } catch (error) {
+        console.error("Error updating points:", error);
+      }
+    };
+
+    // Function to retrieve teams from Firestore and order them by ID
+    const getTeams = async () => {
+      try {
+        const teamsSnapshot = await getDocs(collection(firestore, "Teams"));
+        const teams = teamsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name || `Team ${doc.id}`,
+          points: doc.data().points || 0
+        }));
+        teams.sort((a, b) => parseInt(a.id.match(/\d+/)[0]) - parseInt(b.id.match(/\d+/)[0]));
+        return teams;
+      } catch (error) {
+        console.error("Error getting teams:", error);
+      }
+    };
+
+    // Function to display teams on the UI
+    const displayTeams = async () => {
+      const teams = await getTeams();
+      const appContent = document.getElementById("appContent");
+      appContent.innerHTML = "";
+
+      teams.forEach(team => {
+        const teamCard = `
+          <div class="teamCard">
+            <p class="teamTitle">${team.name}</p>
+            <p class="teamScore">Points: ${team.points}</p>
+            <input type="number" id="pointsInput-${team.id}" placeholder="Enter points" />
+            <button onclick="addPoints('${team.id}')">Add Points</button>
+            <button onclick="deductPoints('${team.id}')">Deduct Points</button>
+          </div>
+        `;
+        appContent.innerHTML += teamCard;
+      });
+    };
+
+    // Function to add points to a team
+    const addPoints = async (teamId) => {
+      try {
+        const pointsInput = document.getElementById(`pointsInput-${teamId}`);
+        const pointsToAdd = parseInt(pointsInput.value, 10);
+        console.log(`Adding ${pointsToAdd} points to team ${teamId}`);
+        if (isNaN(pointsToAdd) || pointsToAdd <= 0) {
+          alert("Please enter a valid number of points.");
+          return;
+        }
+        await updatePoints(teamId, pointsToAdd);
+        pointsInput.value = '';
+      } catch (error) {
+        console.error("Error adding points:", error);
+      }
+    };
+
+    // Function to deduct points from a team
+    const deductPoints = async (teamId) => {
+      try {
+        const pointsInput = document.getElementById(`pointsInput-${teamId}`);
+        const pointsToDeduct = parseInt(pointsInput.value, 10);
+        console.log(`Deducting ${pointsToDeduct} points from team ${teamId}`);
+        if (isNaN(pointsToDeduct) || pointsToDeduct <= 0) {
+          alert("Please enter a valid number of points.");
+          return;
+        }
+        await updatePoints(teamId, -pointsToDeduct);
+        pointsInput.value = '';
+      } catch (error) {
+        console.error("Error deducting points:", error);
+      }
+    };
+
+    // Login function
+    const login = async (email, password) => {
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        console.log("Login successful:", user);
+        document.getElementById("loginMessage").textContent = "Login successful!";
+        document.getElementById("loginFormContainer").style.display = "none";
+        document.getElementById("appContent").style.display = "flex";
+        document.getElementById("logoutButton").style.display = "block";
+        displayTeams();
+      } catch (error) {
+        const errorMessage = error.message;
+        console.error("Error logging in:", errorMessage);
+        document.getElementById("loginMessage").textContent = errorMessage;
+      }
+    };
+
+    // Logout function
+    const logout = async () => {
+      try {
+        await signOut(auth);
+        console.log("User signed out successfully");
+        document.getElementById("loginFormContainer").style.display = "flex";
+        document.getElementById("appContent").style.display = "none";
+        document.getElementById("logoutButton").style.display = "none";
+      } catch (error) {
+        console.error("Error signing out:", error);
+      }
+    };
+
+    // Check if user is logged in on page load
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log("User is logged in:", user);
+        document.getElementById("loginFormContainer").style.display = "none";
+        document.getElementById("appContent").style.display = "flex";
+        document.getElementById("logoutButton").style.display = "block";
+        displayTeams();
+      } else {
+        console.log("User is not logged in");
+        document.getElementById("loginFormContainer").style.display = "flex";
+        document.getElementById("appContent").style.display = "none";
+        document.getElementById("logoutButton").style.display = "none";
+      }
+    });
+
+    // Handle form submission
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("loginForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const email = document.getElementById("loginEmail").value;
+        const password = document.getElementById("loginPassword").value;
+        login(email, password);
+      });
+
+      document.getElementById("logoutButton").addEventListener("click", logout);
+    });
+
+    // Expose the functions to the global scope
+    window.addPoints = addPoints;
+    window.deductPoints = deductPoints;
+  </script>
+
+  <!-- CSS Styles -->
+  <style>
+    /* Global styles */
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f0f2f5;
+      color: #333;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* Header styles */
+    .header {
+      background-color: #283593;
+      color: #fff;
+      padding: 15px 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .header p {
+      margin: 0;
+      padding-left: 20px;
+      font-size: 1.8em;
+    }
+
+    .header .button {
+      margin-right: 20px;
+      padding: 10px 25px;
+      background-color: #5c6bc0;
+      color: #fff;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 1em;
+    }
+
+    .header .button:hover {
+      background-color: #3949ab;
+    }
+
+    /* Main content styles */
+    .appContent {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-around;
+      gap: 20px;
+      padding: 40px 0;
+      display: none;
+    }
+
+    .teamCard {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      width: 300px;
+      text-align: center;
+    }
+
+    .teamTitle {
+      font-size: 1.5em;
+      margin-bottom: 10px;
+    }
+
+    .teamScore {
+      font-size: 1.2em;
+      margin-bottom: 20px;
+    }
+
+    .teamCard input {
+      width: calc(100% - 20px);
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 1em;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #5c6bc0;
+      color: #fff;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 1em;
+    }
+
+    button:hover {
+      background-color: #3949ab;
+    }
+
+    .loginContainer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    .loginForm {
+      background-color: #fff;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      width: 300px;
+    }
+
+    .loginForm h2 {
+      margin: 0 0 20px;
+      text-align: center;
+    }
+
+    .loginForm input {
+      width: calc(100% - 20px);
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 1em;
+    }
+
+    .loginForm button {
+      width: 100%;
+      padding: 10px;
+      background-color: #5c6bc0;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+
+    .loginForm button:hover {
+      background-color: #3949ab;
+    }
+
+    .loginMessage {
+      text-align: center;
+      color: red;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <p>Points System</p>
+    <button id="logoutButton" class="button" style="display: none;">Logout</button>
+  </header>
+
+  <!-- Main content -->
+  <div class="container">
+    <!-- Login form -->
+    <div id="loginFormContainer" class="loginContainer">
+      <form id="loginForm" class="loginForm">
+        <h2>Login</h2>
+        <input type="email" id="loginEmail" placeholder="Email" required />
+        <input type="password" id="loginPassword" placeholder="Password" required />
+        <button type="submit">Login</button>
+        <p id="loginMessage" class="loginMessage"></p>
+      </form>
+    </div>
+
+    <!-- Teams content -->
+    <div id="appContent" class="appContent">
+      <!-- Teams will be dynamically inserted here -->
+    </div>
+  </div>
+</body>
+</html>
+
+
